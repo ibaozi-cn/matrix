@@ -2,14 +2,14 @@ apply plugin: 'groovy'
 apply plugin: 'java'
 
 dependencies {
-    compile fileTree(include: ['*.jar'], dir: 'libs')
-    compile gradleApi()
-    compile localGroovy()
-    compile project(':matrix-commons')
-    compile group: 'org.ow2.asm', name: 'asm', version: '5.1'
-    compile group: 'org.ow2.asm', name: 'asm-commons', version: '5.1'
-    compile 'com.android.tools.build:gradle:2.1.0'
-    compile project(':matrix-arscutil')
+    implementation fileTree(include: ['*.jar'], dir: 'libs')
+    implementation gradleApi()
+    implementation localGroovy()
+    implementation project(':matrix-commons')
+    implementation group: 'org.ow2.asm', name: 'asm', version: '5.1'
+    implementation group: 'org.ow2.asm', name: 'asm-commons', version: '5.1'
+    implementation 'com.android.tools.build:gradle:4.1.0'
+    implementation project(':matrix-arscutil')
 }
 sourceSets {
     main {

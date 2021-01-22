@@ -1,3 +1,5 @@
+import org.gradle.util.GradleVersion
+
 // OSS_ANDROID_TEMPLATE_FILE_HEADER
 /**
  * New android-publish gradle script

@@ -1,6 +1,7 @@
 package com.tencent.matrix.trace.transform;
 
 import com.android.build.api.transform.DirectoryInput;
+import com.android.build.api.transform.Format;
 import com.android.build.api.transform.JarInput;
 import com.android.build.api.transform.QualifiedContent;
 import com.android.build.api.transform.Status;
@@ -8,11 +9,11 @@ import com.android.build.api.transform.Transform;
 import com.android.build.api.transform.TransformException;
 import com.android.build.api.transform.TransformInput;
 import com.android.build.api.transform.TransformInvocation;
+import com.android.build.api.transform.TransformOutputProvider;
+import com.android.build.gradle.api.ApplicationVariant;
+import com.android.build.gradle.internal.api.ApplicationVariantImpl;
 import com.android.build.gradle.internal.pipeline.TransformManager;
 import com.android.build.gradle.internal.pipeline.TransformTask;
-import com.android.build.gradle.internal.scope.GlobalScope;
-import com.android.build.gradle.internal.scope.VariantScope;
-import com.android.build.gradle.internal.variant.BaseVariantData;
 import com.android.utils.FileUtils;
 import com.google.common.base.Charsets;
 import com.google.common.base.Joiner;
@@ -66,23 +67,26 @@ public class MatrixTraceTransform extends Transform {
     private Transform origTransform;
     private ExecutorService executor = Executors.newFixedThreadPool(16);
 
-    public static void inject(Project project, MatrixTraceExtension extension, VariantScope variantScope) {
+    public static void inject(Project project, MatrixTraceExtension extension, ApplicationVariant applicationVariant) {
+        ApplicationVariantImpl variant = (ApplicationVariantImpl) applicationVariant;
+        String name = variant.getName();
+        String appId = variant.getApplicationId();
+        File buildDir = project.getBuildDir();
+        String dirName = variant.getDirName();
 
-        GlobalScope globalScope = variantScope.getGlobalScope();
-        BaseVariantData variant = variantScope.getVariantData();
         String mappingOut = Joiner.on(File.separatorChar).join(
-                String.valueOf(globalScope.getBuildDir()),
+                String.valueOf(buildDir),
                 FD_OUTPUTS,
                 "mapping",
-                variantScope.getVariantConfiguration().getDirName());
+                dirName);
 
         String traceClassOut = Joiner.on(File.separatorChar).join(
-                String.valueOf(globalScope.getBuildDir()),
+                String.valueOf(buildDir),
                 FD_OUTPUTS,
                 "traceClassOut",
-                variantScope.getVariantConfiguration().getDirName());
+                dirName);
         Configuration config = new Configuration.Builder()
-                .setPackageName(variant.getApplicationId())
+                .setPackageName(appId)
                 .setBaseMethodMap(extension.getBaseMethodMapFile())
                 .setBlackListFile(extension.getBlackListFile())
                 .setMethodMapFilePath(mappingOut + "/methodMapping.txt")
@@ -92,7 +96,7 @@ public class MatrixTraceTransform extends Transform {
                 .build();
 
         try {
-            String[] hardTask = getTransformTaskName(extension.getCustomDexTransformName(), variant.getName());
+            String[] hardTask = getTransformTaskName(extension.getCustomDexTransformName(), name);
             for (Task task : project.getTasks()) {
                 for (String str : hardTask) {
                     if (task.getName().equalsIgnoreCase(str) && task instanceof TransformTask) {
@@ -117,8 +121,8 @@ public class MatrixTraceTransform extends Transform {
             return new String[]{customDexTransformName + "For" + buildTypeSuffix};
         } else {
             String[] names = new String[]{
-                    "transformClassesWithDexBuilderFor" + buildTypeSuffix,
-                    "transformClassesWithDexFor" + buildTypeSuffix,
+                    ":app:transformClassesWithDexBuilderFor" + buildTypeSuffix,
+                    ":app:transformClassesWithDexFor" + buildTypeSuffix,
             };
             return names;
         }
@@ -140,7 +144,7 @@ public class MatrixTraceTransform extends Transform {
     }
 
     @Override
-    public Set<QualifiedContent.Scope> getScopes() {
+    public Set<? super QualifiedContent.Scope> getScopes() {
         return TransformManager.SCOPE_FULL_PROJECT;
     }
 
@@ -184,15 +188,40 @@ public class MatrixTraceTransform extends Transform {
         Map<File, File> dirInputOutMap = new ConcurrentHashMap<>();
         Map<File, File> jarInputOutMap = new ConcurrentHashMap<>();
         Collection<TransformInput> inputs = transformInvocation.getInputs();
+        TransformOutputProvider outputProvider = transformInvocation.getOutputProvider();
+
 
         for (TransformInput input : inputs) {
 
             for (DirectoryInput directoryInput : input.getDirectoryInputs()) {
                 futures.add(executor.submit(new CollectDirectoryInputTask(dirInputOutMap, directoryInput, isIncremental)));
+
+                if (outputProvider != null) {
+                    File dest = outputProvider.getContentLocation(directoryInput.getName(), directoryInput.getContentTypes(), directoryInput.getScopes(), Format.DIRECTORY);
+                    try {
+                        org.apache.commons.io.FileUtils.copyDirectory(directoryInput.getFile(), dest);
+                    } catch (IOException e) {
+                        e.printStackTrace();
+                    }
+                }
             }
 
             for (JarInput inputJar : input.getJarInputs()) {
                 futures.add(executor.submit(new CollectJarInputTask(inputJar, isIncremental, jarInputOutMap, dirInputOutMap)));
+
+                if (outputProvider != null) {
+                    File dest = outputProvider.getContentLocation(
+                            inputJar.getName(),
+                            inputJar.getContentTypes(),
+                            inputJar.getScopes(),
+                            Format.JAR);
+                    //将修改过的字节码copy到dest，就可以实现编译期间干预字节码的目的了
+                    try {
+                        org.apache.commons.io.FileUtils.copyFile(inputJar.getFile(), dest);
+                    } catch (IOException e) {
+                        e.printStackTrace();
+                    }
+                }
             }
         }
 
@@ -353,7 +382,7 @@ public class MatrixTraceTransform extends Transform {
 
             if (!dirInput.exists() && dirOutput.exists()) {
                 if (dirOutput.isDirectory()) {
-                    FileUtils.deleteFolder(dirOutput);
+                    FileUtils.deleteDirectoryContents(dirOutput);
                 } else {
                     FileUtils.delete(dirOutput);
                 }

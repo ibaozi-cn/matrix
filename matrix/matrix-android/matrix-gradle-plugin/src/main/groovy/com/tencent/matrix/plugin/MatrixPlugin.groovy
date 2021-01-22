@@ -48,7 +48,7 @@ class MatrixPlugin implements Plugin<Project> {
             android.applicationVariants.all { variant ->
 
                 if (configuration.trace.enable) {
-                    com.tencent.matrix.trace.transform.MatrixTraceTransform.inject(project, configuration.trace, variant.getVariantData().getScope())
+                    com.tencent.matrix.trace.transform.MatrixTraceTransform.inject(project, configuration.trace, variant)
                 }
 
                 if (configuration.removeUnusedResources.enable) {
