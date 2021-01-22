@@ -1,5 +1,9 @@
 apply plugin: 'groovy'
 apply plugin: 'java'
+// JitPack Maven
+apply plugin: 'com.github.dcendents.android-maven'
+// Your Group
+group='com.github.ibaozi-cn'
 
 dependencies {
     implementation fileTree(include: ['*.jar'], dir: 'libs')
