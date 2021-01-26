@@ -121,8 +121,8 @@ public class MatrixTraceTransform extends Transform {
             return new String[]{customDexTransformName + "For" + buildTypeSuffix};
         } else {
             String[] names = new String[]{
-                    ":app:transformClassesWithDexBuilderFor" + buildTypeSuffix,
-                    ":app:transformClassesWithDexFor" + buildTypeSuffix,
+                    "transformClassesWithDexBuilderFor" + buildTypeSuffix,
+                    "transformClassesWithDexFor" + buildTypeSuffix,
             };
             return names;
         }
