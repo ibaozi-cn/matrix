@@ -1,7 +1,6 @@
 package com.tencent.matrix.trace.transform;
 
 import com.android.build.api.transform.DirectoryInput;
-import com.android.build.api.transform.Format;
 import com.android.build.api.transform.JarInput;
 import com.android.build.api.transform.QualifiedContent;
 import com.android.build.api.transform.Status;
@@ -195,33 +194,10 @@ public class MatrixTraceTransform extends Transform {
 
             for (DirectoryInput directoryInput : input.getDirectoryInputs()) {
                 futures.add(executor.submit(new CollectDirectoryInputTask(dirInputOutMap, directoryInput, isIncremental)));
-
-                if (outputProvider != null) {
-                    File dest = outputProvider.getContentLocation(directoryInput.getName(), directoryInput.getContentTypes(), directoryInput.getScopes(), Format.DIRECTORY);
-                    try {
-                        org.apache.commons.io.FileUtils.copyDirectory(directoryInput.getFile(), dest);
-                    } catch (IOException e) {
-                        e.printStackTrace();
-                    }
-                }
             }
 
             for (JarInput inputJar : input.getJarInputs()) {
                 futures.add(executor.submit(new CollectJarInputTask(inputJar, isIncremental, jarInputOutMap, dirInputOutMap)));
-
-                if (outputProvider != null) {
-                    File dest = outputProvider.getContentLocation(
-                            inputJar.getName(),
-                            inputJar.getContentTypes(),
-                            inputJar.getScopes(),
-                            Format.JAR);
-                    //将修改过的字节码copy到dest，就可以实现编译期间干预字节码的目的了
-                    try {
-                        org.apache.commons.io.FileUtils.copyFile(inputJar.getFile(), dest);
-                    } catch (IOException e) {
-                        e.printStackTrace();
-                    }
-                }
             }
         }
 
