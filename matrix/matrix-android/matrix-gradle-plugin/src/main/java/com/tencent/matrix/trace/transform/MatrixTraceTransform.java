@@ -1,6 +1,7 @@
 package com.tencent.matrix.trace.transform;
 
 import com.android.build.api.transform.DirectoryInput;
+import com.android.build.api.transform.Format;
 import com.android.build.api.transform.JarInput;
 import com.android.build.api.transform.QualifiedContent;
 import com.android.build.api.transform.Status;
@@ -43,6 +44,7 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
 import java.lang.reflect.Field;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.LinkedList;
@@ -56,6 +58,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicInteger;
+
 
 import static com.android.builder.model.AndroidProject.FD_OUTPUTS;
 
@@ -156,15 +159,14 @@ public class MatrixTraceTransform extends Transform {
     public void transform(TransformInvocation transformInvocation) throws TransformException, InterruptedException, IOException {
         super.transform(transformInvocation);
         long start = System.currentTimeMillis();
+        origTransform.transform(transformInvocation);
+        long origTransformCost = System.currentTimeMillis() - start;
         try {
             doTransform(transformInvocation); // hack
         } catch (ExecutionException e) {
             e.printStackTrace();
         }
         long cost = System.currentTimeMillis() - start;
-        long begin = System.currentTimeMillis();
-        origTransform.transform(transformInvocation);
-        long origTransformCost = System.currentTimeMillis() - begin;
         Log.i("Matrix." + getName(), "[transform] cost time: %dms %s:%sms MatrixTraceTransform:%sms", System.currentTimeMillis() - start, origTransform.getClass().getSimpleName(), origTransformCost, cost);
     }
 
@@ -225,8 +227,46 @@ public class MatrixTraceTransform extends Transform {
         methodTracer.trace(dirInputOutMap, jarInputOutMap);
         Log.i(TAG, "[doTransform] Step(3)[Trace]... cost:%sms", System.currentTimeMillis() - start);
 
+        /**
+         * step 4
+         */
+        start = System.currentTimeMillis();
+        for (TransformInput input : inputs) {
+            HashMap<String, File> inputMap = new HashMap<>();
+            for (DirectoryInput directoryInput : input.getDirectoryInputs()) {
+                if (inputMap.containsKey(directoryInput.getFile().getAbsolutePath())) continue;
+                inputMap.put(directoryInput.getFile().getAbsolutePath(), directoryInput.getFile());
+                if (outputProvider != null) {
+                    File dest = outputProvider.getContentLocation(directoryInput.getName(), directoryInput.getContentTypes(), directoryInput.getScopes(), Format.DIRECTORY);
+                    try {
+                        org.apache.commons.io.FileUtils.copyDirectory(directoryInput.getFile(), dest);
+                        System.out.println("directoryInput.getFile()=" + directoryInput.getFile().getAbsolutePath());
+                        System.out.println("dest=" + dest.getAbsolutePath());
+                    } catch (IOException e) {
+                        System.out.println("e:" + e.toString());
+                        e.printStackTrace();
+                    }
+                }
+            }
+            for (JarInput inputJar : input.getJarInputs()) {
+                if (outputProvider != null) {
+                    File dest = outputProvider.getContentLocation(
+                            inputJar.getName(),
+                            inputJar.getContentTypes(),
+                            inputJar.getScopes(),
+                            Format.JAR);
+                    //将修改过的字节码copy到dest，就可以实现编译期间干预字节码的目的了
+                    try {
+                        org.apache.commons.io.FileUtils.copyFile(inputJar.getFile(), dest);
+                    } catch (IOException e) {
+                        System.out.println("e:" + e.toString());
+                        e.printStackTrace();
+                    }
+                }
+            }
+        }
+        Log.i(TAG, "[doTransform] Step(4)[CopyFile]... cost:%sms", System.currentTimeMillis() - start);
     }
-
 
     private class ParseMappingTask implements Runnable {
 
